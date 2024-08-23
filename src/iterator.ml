@@ -7,12 +7,10 @@ module Action = struct
   type t =
     | Stop
     | Continue
-    | Wait of { pushback : unit Deferred.t }
-  [@@deriving sexp_of]
+    | Wait of { global_ pushback : unit Deferred.t }
+  [@@deriving globalize, sexp_of]
 
-  let globalize x = x
-
-  let of_maybe_pushback pushback =
+  let of_maybe_pushback pushback = exclave_
     let pushback = Maybe_pushback.to_deferred pushback in
     if Deferred.is_determined pushback then Continue else Wait { pushback }
   ;;
@@ -21,7 +19,7 @@ end
 module Producer = struct
   type 'message t =
     { iter :
-        f:('message -> Action.t)
+        f:(local_ 'message -> local_ Action.t)
         -> stop:unit Deferred.Choice.t list
         -> unit Or_error.t Deferred.t
     }
@@ -30,7 +28,7 @@ end
 
 module Consumer = struct
   type 'message t =
-    { f : 'message -> Action.t
+    { f : local_ 'message -> local_ Action.t
     ; stop : unit Deferred.Choice.t list
     }
 end
@@ -102,7 +100,9 @@ module Local = struct
   let create_producer_staged' ~iter ~start =
     let f_set_once = Set_once.create () in
     let f = lazy (Set_once.get_exn f_set_once [%here]) in
-    let%bind.Deferred.Or_error state = iter ~f:(fun message -> (force f) message) in
+    let%bind.Deferred.Or_error state =
+      iter ~f:(fun message -> exclave_ (force f) message)
+    in
     let producer =
       create_producer' ~iter:(fun ~f ~stop ->
         Set_once.set_exn f_set_once [%here] f;
@@ -130,10 +130,14 @@ module Local = struct
 
   let create_consumer ~f ?stop () =
     match stop with
-    | None -> create_consumer' ~f:(fun message -> Action.of_maybe_pushback (f message)) ()
+    | None ->
+      create_consumer'
+        ~f:(fun message -> exclave_ Action.of_maybe_pushback (f message))
+        ()
     | Some stop ->
       create_consumer'
         ~f:(fun message ->
+          exclave_
           if Deferred.is_determined stop
           then Stop
           else Action.of_maybe_pushback (f message))
@@ -141,7 +145,7 @@ module Local = struct
         ()
   ;;
 
-  let gen_inspect ~f ~g message =
+  let gen_inspect ~f ~g message = exclave_
     f message;
     g message
   ;;
@@ -154,18 +158,20 @@ module Local = struct
     { Consumer.f = gen_inspect ~f ~g; stop }
   ;;
 
-  let gen_filter ~f ~g message : Action.t = if f message then g message else Continue
+  let gen_filter ~f ~g message : Action.t = exclave_
+    if f message then g message else Continue
+  ;;
 
   let filter { Producer.iter } ~f =
     { Producer.iter = (fun ~f:g -> iter ~f:(gen_filter ~f ~g)) }
   ;;
 
   let contra_filter { Consumer.f = g; stop } ~f = { Consumer.f = gen_filter ~f ~g; stop }
-  let gen_map ~f ~g message = g (f message)
+  let gen_map ~f ~g message = exclave_ g (f message)
   let map { Producer.iter } ~f = { Producer.iter = (fun ~f:g -> iter ~f:(gen_map ~f ~g)) }
   let contra_map { Consumer.f = g; stop } ~f = { Consumer.f = gen_map ~f ~g; stop }
 
-  let gen_filter_map ~f ~g a : Action.t =
+  let gen_filter_map ~f ~g a : Action.t = exclave_
     match f a with
     | None -> Continue
     | Some b -> g b
@@ -179,8 +185,8 @@ module Local = struct
     { Consumer.f = gen_filter_map ~f ~g; stop }
   ;;
 
-  let gen_concat_map ~f ~g a =
-    let rec loop bs ~g ~pushbacks : Action.t =
+  let gen_concat_map ~f ~g a = exclave_
+    let rec loop bs ~g ~pushbacks : Action.t = exclave_
       match bs with
       | [] ->
         if List.is_empty pushbacks
@@ -220,7 +226,7 @@ module Global = struct
 
   let create_producer' ~iter =
     Local.create_producer' ~iter:(fun ~f ~stop ->
-      iter ~f:(fun message -> f { global = message }) ~stop)
+      iter ~f:(fun message -> exclave_ f { global = message }) ~stop)
   ;;
 
   let create_producer_staged ~iter =
@@ -230,7 +236,7 @@ module Global = struct
 
   let create_producer_staged' ~iter ~start =
     Local.create_producer_staged'
-      ~iter:(fun ~f -> iter ~f:(fun message -> f { global = message }))
+      ~iter:(fun ~f -> iter ~f:(fun message -> exclave_ f { global = message }))
       ~start
   ;;
 
@@ -239,7 +245,7 @@ module Global = struct
   ;;
 
   let create_consumer' ~f ?stop () =
-    Local.create_consumer' ~f:(fun { global = message } -> f message) ?stop ()
+    Local.create_consumer' ~f:(fun { global = message } -> exclave_ f message) ?stop ()
   ;;
 
   let gen_inspect ~f { global = message } = f message
@@ -252,7 +258,7 @@ module Global = struct
   let map t ~f = Local.map t ~f:(gen_map ~f)
   let contra_map t ~f = Local.contra_map t ~f:(gen_map ~f)
 
-  let gen_filter_map ~f { global = a } =
+  let gen_filter_map ~f { global = a } = exclave_
     match f a with
     | Some b -> Some { global = b }
     | None -> None
@@ -488,7 +494,8 @@ let add_start { Producer.iter } ~start =
 ;;
 
 let add_stop { Consumer.f; stop = stop_choices } ~stop =
-  { Consumer.f = (fun message -> if Deferred.is_determined stop then Stop else f message)
+  { Consumer.f =
+      (fun message -> exclave_ if Deferred.is_determined stop then Stop else f message)
   ; stop = choice stop (fun _ -> ()) :: stop_choices
   }
 ;;
@@ -504,7 +511,7 @@ let pre_sequence { Consumer.f; stop } =
   let pushback_ref = ref Maybe_pushback.unit in
   let is_stopped = ref false in
   { Consumer.f =
-      (fun { global = message } ->
+      (fun { global = message } -> exclave_
         if !is_stopped
         then Stop
         else (
@@ -528,7 +535,7 @@ let post_sequence { Consumer.f; stop } =
   let pushback_ref = ref Maybe_pushback.unit in
   let is_stopped = ref false in
   { Consumer.f =
-      (fun message ->
+      (fun message -> exclave_
         if !is_stopped
         then Stop
         else (

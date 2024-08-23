@@ -15,22 +15,22 @@ module type Types = sig
   module Local :
     S
     with type 'message wrapper = 'message
-     and type ('a, 'b) create_f = 'a -> 'b
-     and type ('a, 'b) create'_f = 'a -> 'b
-     and type ('a, 'b) op_f = 'a -> 'b
+     and type ('a, 'b) create_f = local_ 'a -> 'b
+     and type ('a, 'b) create'_f = local_ 'a -> local_ 'b
+     and type ('a, 'b) op_f = local_ 'a -> local_ 'b
 
   module Global :
     S
     with type 'message wrapper = 'message Modes.Global.t
      and type ('a, 'b) create_f = 'a -> 'b
-     and type ('a, 'b) create'_f = 'a -> 'b
+     and type ('a, 'b) create'_f = 'a -> local_ 'b
      and type ('a, 'b) op_f = 'a -> 'b
 
   module Batched :
     S
     with type 'message wrapper = 'message Queue.t Modes.Global.t
      and type ('a, 'b) create_f = 'a Queue.t -> 'b
-     and type ('a, 'b) create'_f = 'a Queue.t -> 'b
+     and type ('a, 'b) create'_f = 'a Queue.t -> local_ 'b
      and type ('a, 'b) op_f = 'a -> 'b
 
   (** Certain types are erased from each iterator interface, as they are mostly an 

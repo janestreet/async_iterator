@@ -172,7 +172,7 @@ module type Iterator = sig
     type t =
       | Stop
       | Continue
-      | Wait of { pushback : unit Deferred.t }
+      | Wait of { global_ pushback : unit Deferred.t }
     [@@deriving globalize, sexp_of]
   end
 
@@ -210,9 +210,9 @@ module type Iterator = sig
   module Local :
     S
     with type 'message wrapper := 'message
-     and type ('a, 'b) create_f := 'a -> 'b
-     and type ('a, 'b) create'_f := 'a -> 'b
-     and type ('a, 'b) op_f := 'a -> 'b
+     and type ('a, 'b) create_f := local_ 'a -> 'b
+     and type ('a, 'b) create'_f := local_ 'a -> local_ 'b
+     and type ('a, 'b) op_f := local_ 'a -> local_ 'b
 
   module Global : sig
     (** @inline *)
@@ -220,7 +220,7 @@ module type Iterator = sig
       S_global
       with type 'message wrapper := 'message Modes.Global.t
        and type ('a, 'b) create_f := 'a -> 'b
-       and type ('a, 'b) create'_f := 'a -> 'b
+       and type ('a, 'b) create'_f := 'a -> local_ 'b
        and type ('a, 'b) op_f := 'a -> 'b
 
     val of_sequence : 'message Sequence.t -> 'message Producer.t
@@ -231,7 +231,7 @@ module type Iterator = sig
     S_global
     with type 'message wrapper := 'message Queue.t Modes.Global.t
      and type ('a, 'b) create_f := 'a Queue.t -> 'b
-     and type ('a, 'b) create'_f := 'a Queue.t -> 'b
+     and type ('a, 'b) create'_f := 'a Queue.t -> local_ 'b
      and type ('a, 'b) op_f := 'a -> 'b
 
   (** [create_producer_with_resource] is like the [with_] idiom or

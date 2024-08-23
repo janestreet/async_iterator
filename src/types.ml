@@ -5,22 +5,22 @@ include Types_intf
 
 module Local = struct
   type 'message wrapper = 'message
-  type ('a, 'b) create_f = 'a -> 'b
-  type ('a, 'b) create'_f = 'a -> 'b
-  type ('a, 'b) op_f = 'a -> 'b
+  type ('a, 'b) create_f = local_ 'a -> 'b
+  type ('a, 'b) create'_f = local_ 'a -> local_ 'b
+  type ('a, 'b) op_f = local_ 'a -> local_ 'b
 end
 
 module Global = struct
   type 'message wrapper = 'message Modes.Global.t
   type ('a, 'b) create_f = 'a -> 'b
-  type ('a, 'b) create'_f = 'a -> 'b
+  type ('a, 'b) create'_f = 'a -> local_ 'b
   type ('a, 'b) op_f = 'a -> 'b
 end
 
 module Batched = struct
   type 'message wrapper = 'message Queue.t Modes.Global.t
   type ('a, 'b) create_f = 'a Queue.t -> 'b
-  type ('a, 'b) create'_f = 'a Queue.t -> 'b
+  type ('a, 'b) create'_f = 'a Queue.t -> local_ 'b
   type ('a, 'b) op_f = 'a -> 'b
 end
 
