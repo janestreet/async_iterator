@@ -3,4 +3,4 @@
  (public_name async_iterator)
  (libraries async core_kernel.composition_infix core maybe_pushback)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_template)))

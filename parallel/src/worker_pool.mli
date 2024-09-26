@@ -17,6 +17,6 @@ val close : _ t -> unit Deferred.t
 val create_producer
   :  ('config, 'info, 'args, 'message) t
   -> args:(worker:int -> 'config -> 'info -> 'args)
-  -> 'message Iterator.Global.Producer.t Or_error.t Deferred.t
+  -> 'message Iterator.Producer.t Or_error.t Deferred.t
 
 val number_of_workers : _ t -> int

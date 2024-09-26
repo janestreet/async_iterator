@@ -49,7 +49,7 @@ let create_producer
   ~args
   =
   let tag result ~worker = Or_error.tag_arg result "worker" worker [%sexp_of: int] in
-  Iterator.Global.create_producer_staged'
+  Iterator.create_producer_staged'
     ~iter:(fun ~f ->
       let%bind producers, errors =
         Deferred.List.mapi
@@ -60,7 +60,7 @@ let create_producer
         >>| List.partition_result
       in
       if List.is_empty errors
-      then return (Ok (producers, Iterator.Global.create_consumer' ~f ()))
+      then return (Ok (producers, Iterator.create_consumer' ~f ()))
       else (
         let%bind (_ : unit Or_error.t list) =
           Deferred.List.map ~how:`Parallel producers ~f:Iterator.abort

@@ -56,7 +56,7 @@ module Global : sig
     -> start_rpc:unit Rpc.One_way.t
     -> iter_rpc:('args, 'message, Error.t) Rpc.Pipe_rpc.t
     -> stopped_rpc:(unit, unit Or_error.t) Rpc.Rpc.t
-    -> 'message Iterator.Global.Producer.t Or_error.t Deferred.t
+    -> 'message Iterator.Producer.t Or_error.t Deferred.t
 
   (** [of_direct_pipe] has the same properties w.r.t. access to the RPC transport's
       buffer as [of_pipe_rpc]. *)
@@ -69,5 +69,5 @@ module Global : sig
     -> start_f:('worker, unit, unit) Rpc_parallel.Function.t
     -> iter_f:('worker, 'args, 'message) Rpc_parallel.Function.Direct_pipe.t
     -> stopped_f:('worker, unit, unit Or_error.t) Rpc_parallel.Function.t
-    -> 'message Iterator.Global.Producer.t Or_error.t Deferred.t
+    -> 'message Iterator.Producer.t Or_error.t Deferred.t
 end

@@ -93,7 +93,7 @@ module Global = struct
       client
       ~close:(close >> Deferred.ok)
       ~create:(fun connection ->
-        Iterator.Global.create_producer_staged'
+        Iterator.create_producer_staged'
           ~iter:(fun ~f ->
             let stop_requested = Ivar.create () in
             let this_side_stopped = Ivar.create () in
