@@ -6,12 +6,12 @@ module Action : sig
   type t =
     | Stop
     | Continue
-    | Wait of { pushback : unit Deferred.t }
+    | Wait of { global_ pushback : unit Deferred.t }
   [@@deriving globalize, sexp_of]
 end
 
-type%template -'a f := 'a -> unit Maybe_pushback.t [@@mode m = (global, local)]
-type%template -'a f' := 'a -> Action.t [@@mode m = (global, local)]
+type%template -'a f := 'a @ m -> unit Maybe_pushback.t [@@mode m = (global, local)]
+type%template -'a f' := 'a @ m -> Action.t @ local [@@mode m = (global, local)]
 
 (** A [Producer.t] represents the input of an iteration. For example, one might want to
       read from a pipe, or from a database, or from a value generator. Generalizing over
@@ -135,7 +135,7 @@ val create_consumer'
       [filter_map], and [concat_map]. *)
 
 type ('a, 'b, 'c) op :=
-  ('a Producer.t[@mode m]) -> f:('a -> 'b) -> ('c Producer.t[@mode m])
+  ('a Producer.t[@mode m]) -> f:('a @ m -> 'b @ m) -> ('c Producer.t[@mode m])
 [@@mode m]
 
 val inspect : (('a, unit, 'a) op[@mode m]) [@@mode m]
@@ -145,7 +145,7 @@ val filter_map : (('a, 'b option, 'b) op[@mode m]) [@@mode m]
 val concat_map : (('a, 'b list, 'b) op[@mode m]) [@@mode m]
 
 type ('a, 'b, 'c) contra_op :=
-  ('c Consumer.t[@mode m]) -> f:('a -> 'b) -> ('a Consumer.t[@mode m])
+  ('c Consumer.t[@mode m]) -> f:('a @ m -> 'b @ m) -> ('a Consumer.t[@mode m])
 [@@mode m]
 
 val contra_inspect : (('a, unit, 'a) contra_op[@mode m]) [@@mode m]

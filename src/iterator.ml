@@ -6,18 +6,18 @@ module Action = struct
   type t =
     | Stop
     | Continue
-    | Wait of { pushback : unit Deferred.t }
+    | Wait of { global_ pushback : unit Deferred.t }
   [@@deriving sexp_of]
 
   let globalize x = x
 
-  let of_maybe_pushback pushback =
+  let of_maybe_pushback pushback = exclave_
     let pushback = Maybe_pushback.to_deferred pushback in
     if Deferred.is_determined pushback then Continue else Wait { pushback }
   ;;
 end
 
-type%template -'a f' = 'a -> Action.t [@@mode m = (global, local)]
+type%template -'a f' = 'a @ m -> Action.t @ local [@@mode m = (global, local)]
 
 module Producer = struct
   type -'f t' =
@@ -70,7 +70,7 @@ let[@mode m] create_producer_staged' ~iter ~start =
   let f_set_once = Set_once.create () in
   let f = lazy (Set_once.get_exn f_set_once [%here]) in
   let%bind.Deferred.Or_error state =
-    iter ~f:(fun message -> (force f) message)
+    iter ~f:(fun message -> exclave_ (force f) message)
   in
   let producer =
     (create_producer' [@mode m]) ~iter:(fun ~f ~stop ->
@@ -104,32 +104,32 @@ let[@mode m] create_consumer ~f ?stop () =
   match stop with
   | None ->
     (create_consumer' [@mode m])
-      ~f:(fun message -> Action.of_maybe_pushback (f message))
+      ~f:(fun message -> exclave_ Action.of_maybe_pushback (f message))
       ()
   | Some stop ->
     (create_consumer' [@mode m])
       ~f:(fun message : Action.t ->
-
+        exclave_
         if Deferred.is_determined stop then Stop else Action.of_maybe_pushback (f message))
       ~stop:[ choice stop (fun _ -> ()) ]
       ()
 ;;
 
-let[@inline] gen_inspect ~f ~g x =
+let[@inline] gen_inspect ~f ~g x = exclave_
   f x;
   g x
 ;;
 
-let[@inline] gen_filter ~f ~g x : Action.t = if f x then g x else Continue
-let[@inline] gen_map ~f ~g x = g (f x)
+let[@inline] gen_filter ~f ~g x : Action.t = exclave_ if f x then g x else Continue
+let[@inline] gen_map ~f ~g x = exclave_ g (f x)
 
-let[@inline] gen_filter_map ~f ~g x : Action.t =
+let[@inline] gen_filter_map ~f ~g x : Action.t = exclave_
   match f x with
   | Some y -> g y
   | None -> Continue
 ;;
 
-let[@inline] gen_concat_map ~f ~g x =
+let[@inline] gen_concat_map ~f ~g x = exclave_
   let rec loop ys ~g ~pushbacks : Action.t =
     match ys with
     | [] ->
@@ -409,7 +409,7 @@ let[@mode m] add_start { Producer.iter } ~start =
 
 let[@mode m] add_stop { Consumer.f; stop = stop_choices } ~stop =
   { Consumer.f =
-      (fun message : Action.t ->
+      (fun message : Action.t -> exclave_
         if Deferred.is_determined stop then Stop else f message)
   ; stop = choice stop (fun _ -> ()) :: stop_choices
   }
@@ -433,12 +433,12 @@ let coerce_consumer consumer =
 
 let%template unwrap_producer { Producer.iter } =
   (create_producer' [@mode global]) ~iter:(fun ~f ~stop ->
-    iter ~f:(fun { global = message } -> f message) ~stop)
+    iter ~f:(fun { global = message } -> exclave_ f message) ~stop)
 ;;
 
 let%template wrap_consumer { Consumer.f; stop } =
   (create_consumer' [@mode local])
-    ~f:(fun { global = message } -> f message)
+    ~f:(fun { global = message } -> exclave_ f message)
     ~stop
     ()
 ;;
@@ -447,7 +447,7 @@ let pre_sequence { Consumer.f; stop } =
   let pushback_ref = ref Maybe_pushback.unit in
   let is_stopped = ref false in
   { Consumer.f =
-      (fun message : Action.t ->
+      (fun message : Action.t -> exclave_
         if !is_stopped
         then Stop
         else (
@@ -471,7 +471,7 @@ let post_sequence { Consumer.f; stop } =
   let pushback_ref = ref Maybe_pushback.unit in
   let is_stopped = ref false in
   { Consumer.f =
-      (fun message : Action.t ->
+      (fun message : Action.t -> exclave_
         if !is_stopped
         then Stop
         else (
