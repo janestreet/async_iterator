@@ -10,11 +10,7 @@ module type S = sig
 
   val create : config -> t Or_error.t Deferred.t
   val close : t -> unit Deferred.t
-
-  val create_producer
-    :  t
-    -> args
-    -> message Iterator.Global.Producer.t Or_error.t Deferred.t
+  val create_producer : t -> args -> message Iterator.Producer.t Or_error.t Deferred.t
 end
 
 module Types = struct

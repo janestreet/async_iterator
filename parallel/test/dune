@@ -1,0 +1,6 @@
+(library
+ (name async_iterator_parallel_tests)
+ (libraries async async_iterator async_iterator_parallel
+   base.composition_infix core maybe_pushback core_kernel.nonempty_list)
+ (preprocess
+  (pps ppx_jane)))

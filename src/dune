@@ -1,6 +1,6 @@
 (library
  (name async_iterator)
  (public_name async_iterator)
- (libraries async core_kernel.composition_infix core maybe_pushback)
+ (libraries async base.composition_infix core maybe_pushback)
  (preprocess
   (pps ppx_jane)))

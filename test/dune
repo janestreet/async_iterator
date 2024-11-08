@@ -1,0 +1,6 @@
+(library
+ (name async_iterator_tests)
+ (libraries async_kernel.eager_deferred expect_test_helpers_async async
+   async_iterator base.composition_infix core maybe_pushback)
+ (preprocess
+  (pps ppx_jane)))

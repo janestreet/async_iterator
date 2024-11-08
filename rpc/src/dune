@@ -1,7 +1,7 @@
 (library
  (name async_iterator_rpc)
  (public_name async_iterator.rpc)
- (libraries async async_iterator async_rpc_kernel
-   core_kernel.composition_infix core rpc_parallel)
+ (libraries async async_iterator async_rpc_kernel base.composition_infix core
+   rpc_parallel)
  (preprocess
   (pps ppx_jane)))
