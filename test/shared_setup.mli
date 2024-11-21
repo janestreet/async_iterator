@@ -4,13 +4,11 @@ open! Import
 
 val%template run_test_for_all_producers
   :  iter:
-       (f:('a @ m -> unit Maybe_pushback.t)
+       (f:('a -> unit Maybe_pushback.t)
         -> stop:unit Deferred.t
         -> unit Or_error.t Deferred.t)
   -> iter':
-       (f:('a @ m -> Iterator.Action.t @ local)
-        -> stop:unit Deferred.t
-        -> unit Or_error.t Deferred.t)
+       (f:('a -> Iterator.Action.t) -> stop:unit Deferred.t -> unit Or_error.t Deferred.t)
   -> create_consumer:(unit -> ('b Iterator.Consumer.t[@mode m]))
   -> operation:(('a, 'b) Operation.t[@mode m])
   -> unit Deferred.t
@@ -23,7 +21,7 @@ module Batched : sig
           -> stop:unit Deferred.t
           -> unit Or_error.t Deferred.t)
     -> iter':
-         (f:('a Queue.t -> Iterator.Action.t @ local)
+         (f:('a Queue.t -> Iterator.Action.t)
           -> stop:unit Deferred.t
           -> unit Or_error.t Deferred.t)
     -> create_consumer:(unit -> 'b Iterator.Batched.Consumer.t)

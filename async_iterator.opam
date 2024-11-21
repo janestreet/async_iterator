@@ -13,11 +13,11 @@ depends: [
   "ocaml" {>= "5.1.0"}
   "async"
   "async_rpc_kernel"
+  "base"
   "core"
   "core_kernel"
   "maybe_pushback"
   "ppx_jane"
-  "ppx_template"
   "rpc_parallel"
   "dune"             {>= "3.11.0"}
 ]

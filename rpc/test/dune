@@ -1,6 +1,6 @@
 (library
  (name async_iterator_rpc_tests)
- (libraries async async_iterator async_iterator_rpc
-   core_kernel.composition_infix core maybe_pushback)
+ (libraries async async_iterator async_iterator_rpc base.composition_infix
+   core maybe_pushback)
  (preprocess
   (pps ppx_jane)))

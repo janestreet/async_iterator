@@ -7,11 +7,11 @@ open! Import
 
 type ('a, 'b) t =
   | Ident : (('a, 'a) t[@mode m])
-  | Inspect : ('a @ m -> unit) -> (('a, 'a) t[@mode m])
-  | Filter : ('a @ m -> bool) -> (('a, 'a) t[@mode m])
-  | Map : ('a @ m -> 'b @ m) -> (('a, 'b) t[@mode m])
-  | Filter_map : ('a @ m -> 'b option @ m) -> (('a, 'b) t[@mode m])
-  | Concat_map : ('a @ m -> 'b list @ m) -> (('a, 'b) t[@mode m])
+  | Inspect : ('a -> unit) -> (('a, 'a) t[@mode m])
+  | Filter : ('a -> bool) -> (('a, 'a) t[@mode m])
+  | Map : ('a -> 'b) -> (('a, 'b) t[@mode m])
+  | Filter_map : ('a -> 'b option) -> (('a, 'b) t[@mode m])
+  | Concat_map : ('a -> 'b list) -> (('a, 'b) t[@mode m])
 [@@mode m]
 
 let[@mode m] apply
