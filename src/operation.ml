@@ -3,7 +3,7 @@ open! Async
 open! Import
 
 [%%template
-[@@@mode m = (global, local)]
+[@@@mode.default m = (global, local)]
 
 type ('a, 'b) t =
   | Ident : (('a, 'a) t[@mode m])
@@ -12,9 +12,8 @@ type ('a, 'b) t =
   | Map : ('a @ m -> 'b @ m) -> (('a, 'b) t[@mode m])
   | Filter_map : ('a @ m -> 'b option @ m) -> (('a, 'b) t[@mode m])
   | Concat_map : ('a @ m -> 'b list @ m) -> (('a, 'b) t[@mode m])
-[@@mode m]
 
-let[@mode m] apply
+let apply
   (type a b)
   (t : ((a, b) t[@mode m]))
   (producer : (a Iterator.Producer.t[@mode m]))
@@ -29,7 +28,7 @@ let[@mode m] apply
   | Concat_map f -> (Iterator.concat_map [@mode m]) producer ~f
 ;;
 
-let[@mode m] contra_apply
+let contra_apply
   (type a b)
   (t : ((a, b) t[@mode m]))
   (consumer : (b Iterator.Consumer.t[@mode m]))

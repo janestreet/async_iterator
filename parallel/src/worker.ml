@@ -178,7 +178,10 @@ module For_testing = struct
                    start_rpc
                    Rpc_iterator.implement_start
                    ~on_exception:Close_connection
-               ; Rpc.Pipe_rpc.implement_direct iter_rpc implement_iter
+               ; Rpc.Pipe_rpc.implement_direct
+                   iter_rpc
+                   implement_iter
+                   ~leave_open_on_exception:true
                ; Rpc.Rpc.implement stopped_rpc Rpc_iterator.implement_stopped
                ]
              ~on_unknown_rpc:`Raise

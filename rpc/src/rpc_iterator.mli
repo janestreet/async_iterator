@@ -2,8 +2,8 @@ open! Core
 open! Async
 open! Import
 
-(** This module provides the tools necessary to link an iterator on the consumer end of
-    a pipe RPC to a data stream on the producer end, respecting [start], [stop], and
+(** This module provides the tools necessary to link an iterator on the consumer end of a
+    pipe RPC to a data stream on the producer end, respecting [start], [stop], and
     pushback. It is designed for exactly one active iteration per connection. Attempting
     more than one iteration on the same connection will result in an error. *)
 
@@ -47,9 +47,8 @@ val implement_stopped : Connection_state.t -> unit -> unit Or_error.t Deferred.t
 
 module Global : sig
   (** The underlying [f] is called directly inside of a [Rpc.Pipe_rpc.dispatch_iter]
-      handler, so it is possible to do things like bin-read a substring of the
-      transport's buffer, as long as the data is copied somewhere before pushback is
-      determined. *)
+      handler, so it is possible to do things like bin-read a substring of the transport's
+      buffer, as long as the data is copied somewhere before pushback is determined. *)
   val of_pipe_rpc
     :  (unit -> Rpc.Connection.t Or_error.t Deferred.t)
     -> 'args
@@ -58,8 +57,8 @@ module Global : sig
     -> stopped_rpc:(unit, unit Or_error.t) Rpc.Rpc.t
     -> 'message Iterator.Producer.t Or_error.t Deferred.t
 
-  (** [of_direct_pipe] has the same properties w.r.t. access to the RPC transport's
-      buffer as [of_pipe_rpc]. *)
+  (** [of_direct_pipe] has the same properties w.r.t. access to the RPC transport's buffer
+      as [of_pipe_rpc]. *)
   val of_direct_pipe
     :  (module Rpc_parallel.Worker
           with type t = 'worker
