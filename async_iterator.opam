@@ -19,7 +19,7 @@ depends: [
   "maybe_pushback"
   "ppx_jane"
   "rpc_parallel"
-  "dune"             {>= "3.11.0"}
+  "dune"             {>= "3.17.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "An opinionated asynchronous stream-processing framework"

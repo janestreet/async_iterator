@@ -3,7 +3,7 @@ open! Async
 open! Import
 
 [%%template:
-[@@@mode m = (global, local)]
+[@@@mode.default m = (global, local)]
 
 (** This variant describes the kinds of operations applicable to iterator types. *)
 type ('a, 'b) t =
@@ -13,19 +13,16 @@ type ('a, 'b) t =
   | Map : ('a -> 'b) -> (('a, 'b) t[@mode m])
   | Filter_map : ('a -> 'b option) -> (('a, 'b) t[@mode m])
   | Concat_map : ('a -> 'b list) -> (('a, 'b) t[@mode m])
-[@@mode m]
 
 val apply
   :  (('a, 'b) t[@mode m])
   -> ('a Iterator.Producer.t[@mode m])
   -> ('b Iterator.Producer.t[@mode m])
-[@@mode m]
 
 val contra_apply
   :  (('a, 'b) t[@mode m])
   -> ('b Iterator.Consumer.t[@mode m])
-  -> ('a Iterator.Consumer.t[@mode m])
-[@@mode m]]
+  -> ('a Iterator.Consumer.t[@mode m])]
 
 module Batched : sig
   val apply

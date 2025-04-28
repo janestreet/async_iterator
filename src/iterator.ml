@@ -6,7 +6,7 @@ module Action = struct
   type t =
     | Stop
     | Continue
-    | Wait of { pushback : unit Deferred.t }
+    | Wait of { pushback : unit Deferred.t [@globalized] }
   [@@deriving sexp_of]
 
   let globalize = Fn.id
@@ -43,11 +43,11 @@ let upon' choices f =
 ;;
 
 [%%template
-[@@@mode m = (global, local)]
+[@@@mode.default m = (global, local)]
 
-let[@mode m] create_producer' ~iter = { Producer.iter }
+let create_producer' ~iter = { Producer.iter }
 
-let[@mode m] simple_producer_of_expert ~iter ~(f : (_ f'[@mode m])) ~stop =
+let simple_producer_of_expert ~iter ~(f : (_ f'[@mode m])) ~stop =
   iter
     ~f:(fun message ->
       match (f message : Action.t) with
@@ -59,26 +59,26 @@ let[@mode m] simple_producer_of_expert ~iter ~(f : (_ f'[@mode m])) ~stop =
     ~stop:(Ivar.read stop)
 ;;
 
-let[@mode m] create_producer ~iter =
+let create_producer ~iter =
   (create_producer' [@mode m]) ~iter:(fun ~f ~stop ->
     let stop_ivar = Ivar.create () in
     upon' stop (Ivar.fill_if_empty stop_ivar);
     (simple_producer_of_expert [@mode m]) ~iter ~f ~stop:stop_ivar)
 ;;
 
-let[@mode m] create_producer_staged' ~iter ~start =
+let create_producer_staged' ~iter ~start =
   let f_set_once = Set_once.create () in
-  let f = lazy (Set_once.get_exn f_set_once [%here]) in
+  let f = lazy (Set_once.get_exn f_set_once) in
   let%bind.Deferred.Or_error state = iter ~f:(fun message -> (force f) message) in
   let producer =
     (create_producer' [@mode m]) ~iter:(fun ~f ~stop ->
-      Set_once.set_exn f_set_once [%here] f;
+      Set_once.set_exn f_set_once f;
       start state ~stop)
   in
   return (Ok producer)
 ;;
 
-let[@mode m] create_producer_staged ~iter =
+let create_producer_staged ~iter =
   (create_producer_staged' [@mode m])
     ~iter:(fun ~f ->
       let start_ivar = Ivar.create () in
@@ -96,9 +96,9 @@ let[@mode m] create_producer_staged ~iter =
       stopped)
 ;;
 
-let[@mode m] create_consumer' ~f ?(stop = []) () = { Consumer.f; stop }
+let create_consumer' ~f ?(stop = []) () = { Consumer.f; stop }
 
-let[@mode m] create_consumer ~f ?stop () =
+let create_consumer ~f ?stop () =
   match stop with
   | None ->
     (create_consumer' [@mode m])
@@ -142,46 +142,49 @@ let[@inline] gen_concat_map ~f ~g x =
   loop (f x) ~g ~pushbacks:[]
 ;;
 
-let[@mode m] inspect { Producer.iter } ~f =
-  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop -> iter ~f:(gen_inspect ~f ~g) ~stop)
-;;
-
-let[@mode m] filter { Producer.iter } ~f =
-  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop -> iter ~f:(gen_filter ~f ~g) ~stop)
-;;
-
-let[@mode m] map { Producer.iter } ~f =
-  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop -> iter ~f:(gen_map ~f ~g) ~stop)
-;;
-
-let[@mode m] filter_map { Producer.iter } ~f =
+let inspect { Producer.iter } ~f =
   (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop ->
-    iter ~f:(gen_filter_map ~f ~g) ~stop)
+    iter ~f:((gen_inspect [@mode m]) ~f ~g) ~stop)
 ;;
 
-let[@mode m] concat_map { Producer.iter } ~f =
+let filter { Producer.iter } ~f =
   (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop ->
-    iter ~f:(gen_concat_map ~f ~g) ~stop)
+    iter ~f:((gen_filter [@mode m]) ~f ~g) ~stop)
 ;;
 
-let[@mode m] contra_inspect { Consumer.f = g; stop } ~f =
-  (create_consumer' [@mode m]) ~f:(gen_inspect ~f ~g) ~stop ()
+let map { Producer.iter } ~f =
+  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop ->
+    iter ~f:((gen_map [@mode m]) ~f ~g) ~stop)
 ;;
 
-let[@mode m] contra_filter { Consumer.f = g; stop } ~f =
-  (create_consumer' [@mode m]) ~f:(gen_filter ~f ~g) ~stop ()
+let filter_map { Producer.iter } ~f =
+  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop ->
+    iter ~f:((gen_filter_map [@mode m]) ~f ~g) ~stop)
 ;;
 
-let[@mode m] contra_map { Consumer.f = g; stop } ~f =
-  (create_consumer' [@mode m]) ~f:(gen_map ~f ~g) ~stop ()
+let concat_map { Producer.iter } ~f =
+  (create_producer' [@mode m]) ~iter:(fun ~f:g ~stop ->
+    iter ~f:((gen_concat_map [@mode m]) ~f ~g) ~stop)
 ;;
 
-let[@mode m] contra_filter_map { Consumer.f = g; stop } ~f =
-  (create_consumer' [@mode m]) ~f:(gen_filter_map ~f ~g) ~stop ()
+let contra_inspect { Consumer.f = g; stop } ~f =
+  (create_consumer' [@mode m]) ~f:((gen_inspect [@mode m]) ~f ~g) ~stop ()
 ;;
 
-let[@mode m] contra_concat_map { Consumer.f = g; stop } ~f =
-  (create_consumer' [@mode m]) ~f:(gen_concat_map ~f ~g) ~stop ()
+let contra_filter { Consumer.f = g; stop } ~f =
+  (create_consumer' [@mode m]) ~f:((gen_filter [@mode m]) ~f ~g) ~stop ()
+;;
+
+let contra_map { Consumer.f = g; stop } ~f =
+  (create_consumer' [@mode m]) ~f:((gen_map [@mode m]) ~f ~g) ~stop ()
+;;
+
+let contra_filter_map { Consumer.f = g; stop } ~f =
+  (create_consumer' [@mode m]) ~f:((gen_filter_map [@mode m]) ~f ~g) ~stop ()
+;;
+
+let contra_concat_map { Consumer.f = g; stop } ~f =
+  (create_consumer' [@mode m]) ~f:((gen_concat_map [@mode m]) ~f ~g) ~stop ()
 ;;]
 
 let gen_of_pipe_reader ~read_now ?(flushed = Pipe.Flushed.When_value_processed) reader =
@@ -383,15 +386,15 @@ let create_producer_with_resource acquire ~close ~create =
 ;;
 
 [%%template
-[@@@mode m = (global, local)]
+[@@@mode.default m = (global, local)]
 
-let[@mode m] abort producer =
+let abort producer =
   start
     producer
     ((create_consumer [@mode m]) ~f:(fun _ -> Maybe_pushback.unit) ~stop:(return ()) ())
 ;;
 
-let[@mode m] add_start { Producer.iter } ~start =
+let add_start { Producer.iter } ~start =
   { Producer.iter =
       (fun ~f ~stop ->
         match%bind
@@ -404,14 +407,14 @@ let[@mode m] add_start { Producer.iter } ~start =
   }
 ;;
 
-let[@mode m] add_stop { Consumer.f; stop = stop_choices } ~stop =
+let add_stop { Consumer.f; stop = stop_choices } ~stop =
   { Consumer.f =
       (fun message : Action.t -> if Deferred.is_determined stop then Stop else f message)
   ; stop = choice stop (fun _ -> ()) :: stop_choices
   }
 ;;
 
-let[@mode m] add_stop' { Consumer.f; stop = stop_choices } ~stop =
+let add_stop' { Consumer.f; stop = stop_choices } ~stop =
   { Consumer.f; stop = List.rev_append stop stop_choices }
 ;;]
 
@@ -443,18 +446,34 @@ let pre_sequence { Consumer.f; stop } =
       (fun message : Action.t ->
         if !is_stopped
         then Stop
+        else if Deferred.is_determined (!pushback_ref :> unit Deferred.t)
+        then (
+          (* If the deferred is already determined we can follow a fast-path, in
+             particular this should be the case if our producer respected the pushback.
+
+             This avoids some allocations, and also caml_modify when our call to the inner
+             consumer doesn't need to pushback either. *)
+          let result = f message in
+          (* If the function is stopping or pushing back we must remember it. *)
+          (match (result : Action.t) with
+           | Stop -> is_stopped := true
+           | Continue -> ()
+           | Wait { pushback } -> pushback_ref := Maybe_pushback.of_deferred pushback);
+          result)
         else (
           Ref.replace pushback_ref (fun pushback ->
-            let%bind.Maybe_pushback () = pushback in
-            if !is_stopped
-            then Maybe_pushback.unit
-            else (
-              match (f message : Action.t) with
-              | Stop ->
-                is_stopped := true;
-                Maybe_pushback.unit
-              | Continue -> Maybe_pushback.unit
-              | Wait { pushback } -> Maybe_pushback.of_deferred pushback));
+            (pushback :> unit Deferred.t)
+            |> Deferred.bind ~f:(fun () ->
+              if !is_stopped
+              then Deferred.unit
+              else (
+                match (f message : Action.t) with
+                | Stop ->
+                  is_stopped := true;
+                  Deferred.unit
+                | Continue -> Deferred.unit
+                | Wait { pushback } -> pushback))
+            |> Maybe_pushback.of_deferred);
           Action.of_maybe_pushback !pushback_ref))
   ; stop
   }
@@ -462,20 +481,16 @@ let pre_sequence { Consumer.f; stop } =
 
 let post_sequence { Consumer.f; stop } =
   let pushback_ref = ref Maybe_pushback.unit in
-  let is_stopped = ref false in
   { Consumer.f =
       (fun message : Action.t ->
-        if !is_stopped
-        then Stop
-        else (
-          match (f message : Action.t) with
-          | Stop -> Stop
-          | Continue -> Action.of_maybe_pushback !pushback_ref
-          | Wait { pushback } ->
-            Ref.replace
-              pushback_ref
-              (Maybe_pushback.bind ~f:(fun () -> Maybe_pushback.of_deferred pushback));
-            Action.of_maybe_pushback !pushback_ref))
+        match (f message : Action.t) with
+        | Stop -> Stop
+        | Continue -> Action.of_maybe_pushback !pushback_ref
+        | Wait { pushback } ->
+          Ref.replace
+            pushback_ref
+            (Maybe_pushback.bind ~f:(fun () -> Maybe_pushback.of_deferred pushback));
+          Action.of_maybe_pushback !pushback_ref)
   ; stop
   }
 ;;

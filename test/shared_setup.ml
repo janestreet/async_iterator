@@ -3,9 +3,9 @@ open! Async
 open! Import
 
 [%%template
-[@@@mode m = (global, local)]
+[@@@mode.default m = (global, local)]
 
-let[@mode m] run_one_test_with_producer_and_consumer_operation
+let run_one_test_with_producer_and_consumer_operation
   ~create_producer
   ~create_consumer
   ~operation
@@ -24,13 +24,7 @@ let[@mode m] run_one_test_with_producer_and_consumer_operation
   return ()
 ;;
 
-let[@mode m] gen_run_test_for_all_producers
-  ~run_one_test
-  ~iter
-  ~iter'
-  ~create_consumer
-  ~operation
-  =
+let gen_run_test_for_all_producers ~run_one_test ~iter ~iter' ~create_consumer ~operation =
   let%bind () =
     run_one_test
       ~create_producer:(fun () ->
@@ -72,7 +66,7 @@ let[@mode m] gen_run_test_for_all_producers
   return ()
 ;;
 
-let[@mode m] run_test_for_all_producers ~iter ~iter' ~create_consumer ~operation =
+let run_test_for_all_producers ~iter ~iter' ~create_consumer ~operation =
   (gen_run_test_for_all_producers [@mode m])
     ~run_one_test:(run_one_test_with_producer_and_consumer_operation [@mode m])
     ~iter

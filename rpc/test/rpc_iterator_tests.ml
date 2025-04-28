@@ -8,10 +8,10 @@ open! Import
    in the future, but if it does we should look into rewriting the tests to only
    check conditions which should hold no matter the implemenation. *)
 let without_backtraces f =
-  let elide_backtraces = !Backtrace.elide in
-  Backtrace.elide := true;
+  let elide_backtraces = Dynamic.get Backtrace.elide in
+  Dynamic.set_root Backtrace.elide true;
   Monitor.protect f ~finally:(fun () ->
-    Backtrace.elide := elide_backtraces;
+    Dynamic.set_root Backtrace.elide elide_backtraces;
     return ())
 ;;
 
@@ -58,6 +58,7 @@ let client ~create_producer ~create_consumer () =
                iter_rpc
                (Staged.unstage
                   (Rpc_iterator.implement_iter ~create_producer ~create_consumer))
+               ~leave_open_on_exception:true
            ; Rpc.Rpc.implement stopped_rpc Rpc_iterator.implement_stopped
            ]
          ~on_unknown_rpc:`Raise
