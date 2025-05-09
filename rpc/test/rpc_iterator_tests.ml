@@ -441,12 +441,21 @@ let%expect_test "iter_pipe_rpc fails to start if connection is closed" =
     {|
     (Error
      (("failed to start"
-       ((rpc_error (Connection_closed (Rpc.Connection.close)))
+       ((rpc_error
+         (Connection_closed
+          ((("Connection closed by local side:" Rpc.Connection.close)
+            (connection_description <created-directly>)))))
         (connection_description <created-directly>) (rpc_name start)
         (rpc_version 0)))
-      ("pipe rpc closed" (Connection_closed (Rpc.Connection.close)))
+      ("pipe rpc closed"
+       (Connection_closed
+        ((("Connection closed by local side:" Rpc.Connection.close)
+          (connection_description <created-directly>)))))
       ("unknown remote stop reason"
-       ((rpc_error (Connection_closed (Rpc.Connection.close)))
+       ((rpc_error
+         (Connection_closed
+          ((("Connection closed by local side:" Rpc.Connection.close)
+            (connection_description <created-directly>)))))
         (connection_description <created-directly>) (rpc_name stopped)
         (rpc_version 0)))))
     |}];
@@ -502,9 +511,15 @@ let%expect_test "iter_pipe_rpc stops if connection is closed" =
     (direct_stream_writer 8)
     (direct_stream_writer 9)
     (Error
-     (("pipe rpc closed" (Connection_closed (Rpc.Connection.close)))
+     (("pipe rpc closed"
+       (Connection_closed
+        ((("Connection closed by local side:" Rpc.Connection.close)
+          (connection_description <created-directly>)))))
       ("unknown remote stop reason"
-       ((rpc_error (Connection_closed (Rpc.Connection.close)))
+       ((rpc_error
+         (Connection_closed
+          ((("Connection closed by local side:" Rpc.Connection.close)
+            (connection_description <created-directly>)))))
         (connection_description <created-directly>) (rpc_name stopped)
         (rpc_version 0)))))
     |}];
