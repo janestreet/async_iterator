@@ -108,8 +108,7 @@ let create_consumer ~f ?stop () =
       ()
   | Some stop ->
     (create_consumer' [@mode m])
-      ~f:(fun message : Action.t ->
-        exclave_
+      ~f:(fun message : Action.t -> exclave_
         if Deferred.is_determined stop then Stop else Action.of_maybe_pushback (f message))
       ~stop:[ choice stop (fun _ -> ()) ]
       ()
