@@ -15,7 +15,6 @@ depends: [
   "async_rpc_kernel"
   "base"
   "core"
-  "core_kernel"
   "maybe_pushback"
   "ppx_jane"
   "rpc_parallel"
