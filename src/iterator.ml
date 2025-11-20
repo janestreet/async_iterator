@@ -299,9 +299,9 @@ let of_direct_stream_writer ?flush_every ?on_flush writer =
 
 let of_sequence sequence =
   (* We can ignore [stop] because sequences are synchronous, i.e. we're guaranteed to
-       either generate another message or finish on every iteration, and are never in a
-       state where we're waiting indefinitely for the next message and need some way to
-       cancel out of it in order to stop. *)
+     either generate another message or finish on every iteration, and are never in a
+     state where we're waiting indefinitely for the next message and need some way to
+     cancel out of it in order to stop. *)
   create_producer' ~iter:(fun ~f ~stop:(_ : unit Deferred.Choice.t list) ->
     Sequence.delayed_fold
       sequence
