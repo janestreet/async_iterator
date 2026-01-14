@@ -99,7 +99,7 @@ let make : type args message. (Config.t, args, message, _) make =
           ~how:how_to_run
           ~name
           ~on_failure:(fun error ->
-            [%log.global.error "Failure" (name : string) (error : Error.t)])
+            [%log.error "Failure" (name : string) (error : Error.t)])
           ~shutdown_on:Heartbeater_connection_timeout
           ~redirect_stdout:(redirect "stdout")
           ~redirect_stderr:(redirect "stderr")
@@ -125,7 +125,7 @@ let make : type args message. (Config.t, args, message, _) make =
                 ~f:(fun message ->
                   Log.Global.message (Log.Message.add_tags message [ "name", name ])))
           in
-          [%log.global.info "Log closed" (name : string) (reason : unit Or_error.t)]
+          [%log.info "Log closed" (name : string) (reason : unit Or_error.t)]
         in
         return (Ok { worker; log_closed })
     ;;
@@ -140,7 +140,7 @@ let make : type args message. (Config.t, args, message, _) make =
            heartbeat timeout (or potentially longer in really weird states?). If users run
            into this in practice and are sad to not have complete logs when something so
            unexpected happens, we can consider doing something different here. *)
-        [%log.global.error
+        [%log.error
           "Failed to shutdown worker"
             (worker : Worker.t)
             ~is_log_closed:(Deferred.is_determined log_closed : bool)
