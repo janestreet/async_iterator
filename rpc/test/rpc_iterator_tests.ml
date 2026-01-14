@@ -2,11 +2,11 @@ open! Core
 open! Async
 open! Import
 
-(* 2023-06-26:  A lot of the tests in this module have the output which
-   is unspecified because it depends on the implementain details of [Async].
-   It is unlikely that the implementation of [Async] will change significantly
-   in the future, but if it does we should look into rewriting the tests to only
-   check conditions which should hold no matter the implemenation. *)
+(* 2023-06-26: A lot of the tests in this module have the output which is unspecified
+   because it depends on the implementain details of [Async]. It is unlikely that the
+   implementation of [Async] will change significantly in the future, but if it does we
+   should look into rewriting the tests to only check conditions which should hold no
+   matter the implemenation. *)
 let without_backtraces f =
   let elide_backtraces = Dynamic.get Backtrace.elide in
   Dynamic.set_root Backtrace.elide true;
