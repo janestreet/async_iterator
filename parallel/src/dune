@@ -2,6 +2,6 @@
  (name async_iterator_parallel)
  (public_name async_iterator.parallel)
  (libraries async async_iterator async_iterator_rpc base.composition_infix
-   core maybe_pushback rpc_parallel)
+   core rpc_parallel)
  (preprocess
   (pps ppx_jane)))
