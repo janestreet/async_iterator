@@ -99,7 +99,7 @@ let gen_iter_with
       ()
   in
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
-  Iterator.start producer consumer >>| ok_exn
+  Iterator.start_unsequenced producer consumer >>| ok_exn
 ;;
 
 let run_test m_payload ~global ~batched ~init ~f ~expect =

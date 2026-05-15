@@ -135,6 +135,12 @@ val inspect : (('a, unit, 'a) op[@mode m])
 val filter : (('a, bool, 'a) op[@mode m])
 val map : (('a, 'b, 'b) op[@mode m])
 val filter_map : (('a, 'b option, 'b) op[@mode m])
+
+(** Note that unlike other functions e.g. [map], the pushback for [concat_map] is
+    per-batch, not per-message. Rather than calling the final consumer's [f] function on
+    each message and waiting for the deferred to become determined before processing the
+    next message, [concat_map] calls [f] on each element of the produced list (the batch),
+    and then waits for all of those invocations to stop pushing back before continuing. *)
 val concat_map : (('a, 'b list, 'b) op[@mode m])
 
 type ('a, 'b, 'c) contra_op :=
@@ -144,6 +150,9 @@ val contra_inspect : (('a, unit, 'a) contra_op[@mode m])
 val contra_filter : (('a, bool, 'a) contra_op[@mode m])
 val contra_map : (('a, 'b, 'b) contra_op[@mode m])
 val contra_filter_map : (('a, 'b option, 'b) contra_op[@mode m])
+
+(** [contra_concat_map] does per-batch rather than per-message pushback. See the comment
+    on [concat_map] for more details. *)
 val contra_concat_map : (('a, 'b list, 'b) contra_op[@mode m])]
 
 val of_pipe_reader
@@ -214,9 +223,39 @@ end
     passes them to the [iter] function contained within [producer], returning the eventual
     outcome of the iteration.
 
+    Note that [start] uses [pre_sequence] internally to ensure that messages received by
+    the consumer are sequenced. This requires the messages to be [global]. See
+    [start_unsequenced] if you want to locally allocate messages.
+
     See the documentation of [create_producer] re: calling [start] multiple times on the
     same producer. *)
-val start : 'f Producer.t' -> 'f Consumer.t' -> unit Or_error.t Deferred.t
+val start : 'a Producer.t -> 'a Consumer.t -> unit Or_error.t Deferred.t
+
+(** [start_unsequenced] is like [start] but does not enforce sequencing on the messages
+    received by the consumer. This means that if the [f] function in the consumer pushes
+    back, it may still get called again arbitrarily many times before the returned
+    deferred becomes determined.
+
+    To see why a lack of sequencing could be a problem, consider a message stream like:
+    - [Create "a"]
+    - [Update "a"]
+
+    where the consumer logic for handling [Update "a"] relies on the consumer already
+    having read [Create "a"] and finished some asynchronous work. If you use
+    [start_unsequenced], it's possible for your [f] function to be called with
+    [Create "a"], start pushing back, and then immediately get called again with
+    [Update "a"] before the pushback deferred becomes determined.
+
+    If the above case doesn't apply to you (e.g. your callback is synchronous, or the
+    sequencing of pushback per message isn't important) then you can use
+    [start_unsequenced] and have locally-allocated messages.
+
+    Note that it's still guaranteed that [f] gets called on each message in order. So, if
+    you only need sequencing for the synchronous prefix of [f], this will work for you.
+    This can happen if [f] does something like "synchronously update some state, then wait
+    for some advisory pushback". In particular, [Pipe.write] is like this, so
+    [start_unsequenced] is safe to use with [of_pipe_writer]. *)
+val start_unsequenced : 'f Producer.t' -> 'f Consumer.t' -> unit Or_error.t Deferred.t
 
 (** [create_producer_with_resource] is like the [with_] idiom or [With_resource] library,
     but delays cleanup until after the iteration has completed. This avoids problems a la

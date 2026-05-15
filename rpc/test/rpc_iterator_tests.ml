@@ -18,9 +18,7 @@ let without_backtraces f =
 let sequence ?(stop = 10) () = Sequence.range 0 stop
 
 let sequence' ?(stop = 20) ?(queue_length = 2) () =
-  sequence ~stop ()
-  |> Fn.flip Sequence.chunks_exn queue_length
-  |> Sequence.map ~f:Queue.of_list
+  sequence ~stop () |> Sequence.chunks_exn _ queue_length |> Sequence.map ~f:Queue.of_list
 ;;
 
 let print ?label i =
@@ -95,7 +93,7 @@ let iter_pipe_rpc
     | Some start -> Iterator.add_start producer ~start
     | None -> producer
   in
-  Iterator.start producer consumer
+  Iterator.start_unsequenced producer consumer
 ;;
 
 let iter_pipe_rpc'
@@ -121,13 +119,13 @@ let iter_pipe_rpc'
       ~stopped_rpc
     >>| Or_error.tag ~tag:"iter failed completely"
   in
-  Iterator.start producer consumer
+  Iterator.start_unsequenced producer consumer
 ;;
 
 let%expect_test "iter_pipe_rpc respects pushback" =
   let%bind () =
     Pipe.create_writer ~size_budget:0 (fun reader ->
-      Iterator.start (Iterator.of_pipe_reader reader) (consumer ()) >>| ok_exn)
+      Iterator.start_unsequenced (Iterator.of_pipe_reader reader) (consumer ()) >>| ok_exn)
     |> Iterator.of_pipe_writer
     |> Iterator.contra_inspect ~f:(print ~label:"pipe_writer")
     |> iter_pipe_rpc ~batch_size:2
@@ -172,7 +170,8 @@ let%expect_test "iter_pipe_rpc respects pushback" =
 let%expect_test "iter_pipe_rpc' respects pushback" =
   let%bind () =
     Pipe.create_writer ~size_budget:1 (fun reader ->
-      Iterator.start (Iterator.Batched.of_pipe_reader reader) (consumer' ()) >>| ok_exn)
+      Iterator.start_unsequenced (Iterator.Batched.of_pipe_reader reader) (consumer' ())
+      >>| ok_exn)
     |> Iterator.of_pipe_writer
     |> Iterator.contra_inspect ~f:(print ~label:"pipe_writer")
     |> iter_pipe_rpc' ~batch_size:4
@@ -436,7 +435,7 @@ let%expect_test "iter_pipe_rpc fails to start if connection is closed" =
   let%bind () = Rpc.Connection.close connection in
   let%bind () = Scheduler.yield_until_no_jobs_remain () in
   [%expect {| |}];
-  let%bind () = Iterator.start producer (consumer ()) >>| print_stop_reason in
+  let%bind () = Iterator.start_unsequenced producer (consumer ()) >>| print_stop_reason in
   [%expect
     {|
     (Error
@@ -490,7 +489,7 @@ let%expect_test "iter_pipe_rpc stops if connection is closed" =
     |> Iterator.contra_inspect ~f:(fun _ ->
       Ivar.fill_if_empty saw_at_least_one_message ())
   in
-  let stopped = Iterator.start producer consumer in
+  let stopped = Iterator.start_unsequenced producer consumer in
   let%bind () = Ivar.read saw_at_least_one_message in
   let%bind () = Rpc.Connection.close connection in
   let%bind () = stopped >>| print_stop_reason in

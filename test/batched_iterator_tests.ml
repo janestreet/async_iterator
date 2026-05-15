@@ -284,7 +284,7 @@ struct
               Maybe_pushback.unit)
             ()
         in
-        let%bind () = Iterator.start producer consumer >>| ok_exn in
+        let%bind () = Iterator.start_unsequenced producer consumer >>| ok_exn in
         print_endline "stopped";
         return ())
     in
@@ -308,12 +308,12 @@ struct
       Pipe.create_reader ~size_budget:0 ~close_on_exception:false (fun writer ->
         let producer =
           Sequence.range 0 10
-          |> Fn.flip Sequence.chunks_exn 3
+          |> Sequence.chunks_exn _ 3
           |> Sequence.map ~f:Queue.of_list
           |> Iterator.of_sequence
         in
         let consumer = Iterator.Batched.of_pipe_writer writer in
-        let%bind () = Iterator.start producer consumer >>| ok_exn in
+        let%bind () = Iterator.start_unsequenced producer consumer >>| ok_exn in
         print_endline "stopped";
         return ())
     in

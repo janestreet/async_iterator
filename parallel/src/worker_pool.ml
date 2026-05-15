@@ -74,7 +74,7 @@ let create_producer
         |> Iterator.add_stop ~stop:(Ivar.read any_error)
       in
       List.mapi producers ~f:(fun i producer ->
-        let%map stopped = Iterator.start producer consumer in
+        let%map stopped = Iterator.start_unsequenced producer consumer in
         if Result.is_error stopped then Ivar.fill_if_empty any_error ();
         tag stopped ~worker:i)
       |> Deferred.Or_error.combine_errors_unit)
