@@ -13,12 +13,15 @@ let run_one_test_with_producer_and_consumer_operation
   let%bind () =
     let%bind producer = create_producer () >>| ok_exn in
     let consumer = create_consumer () in
-    Iterator.start ((Operation.apply [@mode m]) operation producer) consumer >>| ok_exn
+    Iterator.start_unsequenced ((Operation.apply [@mode m]) operation producer) consumer
+    >>| ok_exn
   in
   let%bind () =
     let%bind producer = create_producer () >>| ok_exn in
     let consumer = create_consumer () in
-    Iterator.start producer ((Operation.contra_apply [@mode m]) operation consumer)
+    Iterator.start_unsequenced
+      producer
+      ((Operation.contra_apply [@mode m]) operation consumer)
     >>| ok_exn
   in
   return ()
@@ -84,12 +87,15 @@ module Batched = struct
     let%bind () =
       let%bind producer = create_producer () >>| ok_exn in
       let consumer = create_consumer () in
-      Iterator.start (Operation.Batched.apply operation producer) consumer >>| ok_exn
+      Iterator.start_unsequenced (Operation.Batched.apply operation producer) consumer
+      >>| ok_exn
     in
     let%bind () =
       let%bind producer = create_producer () >>| ok_exn in
       let consumer = create_consumer () in
-      Iterator.start producer (Operation.Batched.contra_apply operation consumer)
+      Iterator.start_unsequenced
+        producer
+        (Operation.Batched.contra_apply operation consumer)
       >>| ok_exn
     in
     return ()

@@ -249,13 +249,13 @@ module%test [@name "[of_sequence]"] _ = struct
     let consumer =
       Iterator.create_consumer ~f:(fun () -> assert false) ~stop:(return ()) ()
     in
-    Iterator.start producer consumer >>| ok_exn
+    Iterator.start_unsequenced producer consumer >>| ok_exn
   ;;
 
   let%expect_test "[Stop] action" =
     let producer = Iterator.of_sequence (Sequence.repeat ()) in
     let consumer = Iterator.create_consumer' ~f:(fun () -> Stop) () in
-    Iterator.start producer consumer >>| ok_exn
+    Iterator.start_unsequenced producer consumer >>| ok_exn
   ;;
 
   let%expect_test "[stop] choices alone cannot stop iterator" =
@@ -268,7 +268,7 @@ module%test [@name "[of_sequence]"] _ = struct
         ~stop:[ choice (return ()) Fn.id ]
         ()
     in
-    let%bind () = Iterator.start producer consumer >>| ok_exn in
+    let%bind () = Iterator.start_unsequenced producer consumer >>| ok_exn in
     [%expect
       {|
       (consumer 1)
@@ -288,7 +288,7 @@ module%test [@name "[of_sequence]"] _ = struct
           Maybe_pushback.of_deferred (Bvar.wait pushback))
         ()
     in
-    let stopped = Iterator.start producer consumer in
+    let stopped = Iterator.start_unsequenced producer consumer in
     [%expect {| (consumer 1) |}];
     print_stopped stopped;
     [%expect {| (stopped Empty) |}];
@@ -311,7 +311,7 @@ module%test [@name "[of_sequence]"] _ = struct
     let consumer = Iterator.create_consumer ~f:(fun () -> failwith "oops") () in
     let%bind () =
       Expect_test_helpers_async.require_does_raise_async (fun () ->
-        Iterator.start producer consumer)
+        Iterator.start_unsequenced producer consumer)
     in
     [%expect {| (Failure oops) |}];
     return ()
@@ -337,7 +337,7 @@ module%test [@name "[of_pipe_reader]"] _ = struct
     Pipe.create_writer (fun reader ->
       let flushed = Option.map ~f:(Flushed.to_pipe_flushed ~reader) flushed in
       let producer = Iterator.of_pipe_reader ?flushed reader in
-      let%bind () = Iterator.start producer consumer >>| ok_exn in
+      let%bind () = Iterator.start_unsequenced producer consumer >>| ok_exn in
       print_endline "stopped";
       return ())
   ;;
@@ -683,7 +683,7 @@ module%test [@name "[of_pipe_reader]"] _ = struct
         let producer = Iterator.of_pipe_reader reader in
         let consumer = Iterator.create_consumer ~f:(fun _ -> failwith "oops") () in
         Expect_test_helpers_async.require_does_raise_async (fun () ->
-          Iterator.start producer consumer))
+          Iterator.start_unsequenced producer consumer))
     in
     Pipe.write_without_pushback writer ();
     let%bind () = Scheduler.yield_until_no_jobs_remain () in
@@ -696,7 +696,7 @@ module%test [@name "[of_pipe_writer]"] _ = struct
   let create_reader ~producer ?size_budget () =
     Pipe.create_reader ?size_budget ~close_on_exception:false (fun writer ->
       let consumer = Iterator.of_pipe_writer writer in
-      let%bind () = Iterator.start producer consumer >>| ok_exn in
+      let%bind () = Iterator.start_unsequenced producer consumer >>| ok_exn in
       print_endline "stopped";
       return ())
   ;;
@@ -766,7 +766,7 @@ module%test [@name "[of_async_writer]"] _ = struct
       in
       let consumer = Iterator.of_async_writer writer ~write:(fun _ _ -> ()) in
       let%bind () = Writer.close writer
-      and () = Iterator.start producer consumer >>| ok_exn in
+      and () = Iterator.start_unsequenced producer consumer >>| ok_exn in
       return ())
   ;;
 
@@ -782,7 +782,7 @@ module%test [@name "[of_async_writer]"] _ = struct
           Deferred.ok (choose stop))
       in
       let consumer = Iterator.of_async_writer writer ~write:Writer.write in
-      Iterator.start producer consumer >>| ok_exn)
+      Iterator.start_unsequenced producer consumer >>| ok_exn)
   ;;
 
   let%expect_test "respects [flush_every]" =
@@ -811,7 +811,7 @@ module%test [@name "[of_async_writer]"] _ = struct
           Deferred.ok stop)
       in
       let consumer = Iterator.of_async_writer ~flush_every:3 writer ~write:Writer.write in
-      Iterator.start producer consumer >>| ok_exn)
+      Iterator.start_unsequenced producer consumer >>| ok_exn)
   ;;
 
   let%expect_test "[on_flush] can push back" =
@@ -835,7 +835,7 @@ module%test [@name "[of_async_writer]"] _ = struct
           writer
           ~write:Writer.write
       in
-      let stopped = Iterator.start producer consumer in
+      let stopped = Iterator.start_unsequenced producer consumer in
       [%expect
         {|
         (pushback (Full ()))
@@ -890,7 +890,7 @@ let%expect_test "[pre_sequence] and [post_sequence] behavior" =
       [ Iterator.of_sequence (Sequence.range ~stride:2 1 6)
       ; Iterator.of_sequence (Sequence.range ~stride:2 0 5)
       ]
-      |> List.map ~f:(fun producer -> Iterator.start producer consumer)
+      |> List.map ~f:(fun producer -> Iterator.start_unsequenced producer consumer)
       |> Deferred.Or_error.all_unit
       >>| ok_exn
     in

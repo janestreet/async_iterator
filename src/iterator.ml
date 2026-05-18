@@ -36,11 +36,68 @@ module Consumer = struct
   type%template -'a t = ('a f'[@mode m]) t' [@@mode m = (global, local)]
 end
 
-let start { Producer.iter } { Consumer.f; stop } = iter ~f ~stop
-
 let upon' choices f =
   don't_wait_for (choose (List.map choices ~f:(Deferred.Choice.map ~f)))
 ;;
+
+let pre_sequence { Consumer.f; stop } =
+  let pushback_ref = ref Maybe_pushback.unit in
+  let is_stopped = ref false in
+  { Consumer.f =
+      (fun message : Action.t -> exclave_
+        if !is_stopped
+        then Stop
+        else if Deferred.is_determined (!pushback_ref :> unit Deferred.t)
+        then (
+          (* If the deferred is already determined we can follow a fast-path, in
+             particular this should be the case if our producer respected the pushback.
+
+             This avoids some allocations, and also caml_modify when our call to the inner
+             consumer doesn't need to pushback either. *)
+          let result = f message in
+          (* If the function is stopping or pushing back we must remember it. *)
+          (match (result : Action.t) with
+           | Stop -> is_stopped := true
+           | Continue -> ()
+           | Wait { pushback } -> pushback_ref := Maybe_pushback.of_deferred pushback);
+          result)
+        else (
+          Ref.replace pushback_ref (fun pushback ->
+            (pushback :> unit Deferred.t)
+            |> Deferred.bind ~f:(fun () ->
+              if !is_stopped
+              then Deferred.unit
+              else (
+                match (f message : Action.t) with
+                | Stop ->
+                  is_stopped := true;
+                  Deferred.unit
+                | Continue -> Deferred.unit
+                | Wait { pushback } -> pushback))
+            |> Maybe_pushback.of_deferred);
+          Action.of_maybe_pushback !pushback_ref))
+  ; stop
+  }
+;;
+
+let post_sequence { Consumer.f; stop } =
+  let pushback_ref = ref Maybe_pushback.unit in
+  { Consumer.f =
+      (fun message : Action.t -> exclave_
+        match (f message : Action.t) with
+        | Stop -> Stop
+        | Continue -> Action.of_maybe_pushback !pushback_ref
+        | Wait { pushback } ->
+          Ref.replace
+            pushback_ref
+            (Maybe_pushback.bind ~f:(fun () -> Maybe_pushback.of_deferred pushback));
+          Action.of_maybe_pushback !pushback_ref)
+  ; stop
+  }
+;;
+
+let start_unsequenced { Producer.iter } { Consumer.f; stop } = iter ~f ~stop
+let start producer consumer = start_unsequenced producer (pre_sequence consumer)
 
 [%%template
 [@@@mode.default m = (global, local)]
@@ -391,7 +448,7 @@ let create_producer_with_resource acquire ~close ~create =
 [@@@mode.default m = (global, local)]
 
 let abort producer =
-  start
+  start_unsequenced
     producer
     ((create_consumer [@mode m]) ~f:(fun _ -> Maybe_pushback.unit) ~stop:(return ()) ())
 ;;
@@ -443,62 +500,6 @@ let%template wrap_consumer { Consumer.f; stop } =
     ~f:(fun { global = message } -> exclave_ f message)
     ~stop
     ()
-;;
-
-let pre_sequence { Consumer.f; stop } =
-  let pushback_ref = ref Maybe_pushback.unit in
-  let is_stopped = ref false in
-  { Consumer.f =
-      (fun message : Action.t -> exclave_
-        if !is_stopped
-        then Stop
-        else if Deferred.is_determined (!pushback_ref :> unit Deferred.t)
-        then (
-          (* If the deferred is already determined we can follow a fast-path, in
-             particular this should be the case if our producer respected the pushback.
-
-             This avoids some allocations, and also caml_modify when our call to the inner
-             consumer doesn't need to pushback either. *)
-          let result = f message in
-          (* If the function is stopping or pushing back we must remember it. *)
-          (match (result : Action.t) with
-           | Stop -> is_stopped := true
-           | Continue -> ()
-           | Wait { pushback } -> pushback_ref := Maybe_pushback.of_deferred pushback);
-          result)
-        else (
-          Ref.replace pushback_ref (fun pushback ->
-            (pushback :> unit Deferred.t)
-            |> Deferred.bind ~f:(fun () ->
-              if !is_stopped
-              then Deferred.unit
-              else (
-                match (f message : Action.t) with
-                | Stop ->
-                  is_stopped := true;
-                  Deferred.unit
-                | Continue -> Deferred.unit
-                | Wait { pushback } -> pushback))
-            |> Maybe_pushback.of_deferred);
-          Action.of_maybe_pushback !pushback_ref))
-  ; stop
-  }
-;;
-
-let post_sequence { Consumer.f; stop } =
-  let pushback_ref = ref Maybe_pushback.unit in
-  { Consumer.f =
-      (fun message : Action.t -> exclave_
-        match (f message : Action.t) with
-        | Stop -> Stop
-        | Continue -> Action.of_maybe_pushback !pushback_ref
-        | Wait { pushback } ->
-          Ref.replace
-            pushback_ref
-            (Maybe_pushback.bind ~f:(fun () -> Maybe_pushback.of_deferred pushback));
-          Action.of_maybe_pushback !pushback_ref)
-  ; stop
-  }
 ;;
 
 module Helpers = struct

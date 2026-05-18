@@ -67,7 +67,8 @@ let implement_iter ~create_producer ~create_consumer =
              ~start:(Connection_state.read_start connection_state)
          in
          upon
-           (Monitor.try_with_join_or_error (fun () -> Iterator.start producer consumer))
+           (Monitor.try_with_join_or_error (fun () ->
+              Iterator.start_unsequenced producer consumer))
            (fun stopped ->
              Connection_state.fill_stopped_exn connection_state stopped;
              Rpc.Pipe_rpc.Direct_stream_writer.close writer);
