@@ -1,4 +1,5 @@
 module Parallel_iterator = Parallel_iterator
+module State_updating = State_updating
 module Worker = Worker
 
 module For_testing = struct

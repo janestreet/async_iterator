@@ -2,22 +2,24 @@ open! Core
 open! Async
 open! Import
 
-type ('config, 'info, 'args, 'message) t =
+type ('config, 'info, 'args, 'message, 'state_update) t =
   | T :
       (module Worker.S
          with type config = 'config
           and type args = 'args
           and type message = 'message
+          and type state_update = 'state_update
           and type t = 'worker)
       * ('config * 'info * 'worker) array
-      -> ('config, 'info, 'args, 'message) t
+      -> ('config, 'info, 'args, 'message, 'state_update) t
 
 let create
-  (type config args message)
+  (type config args message state_update)
   (module Worker : Worker.S
     with type config = config
      and type args = args
-     and type message = message)
+     and type message = message
+     and type state_update = state_update)
   workers
   =
   let%bind workers, errors =
@@ -37,15 +39,15 @@ let create
 ;;
 
 let close
-  (type config args message)
-  (T ((module Worker), workers) : (config, _, args, message) t)
+  (type config args message state_update)
+  (T ((module Worker), workers) : (config, _, args, message, state_update) t)
   =
   Deferred.Array.iter ~how:`Parallel workers ~f:(trd3 >> Worker.close)
 ;;
 
 let create_producer
-  (type config args message)
-  (T ((module Worker), workers) : (config, _, args, message) t)
+  (type config args message state_update)
+  (T ((module Worker), workers) : (config, _, args, message, state_update) t)
   ~args
   =
   let tag result ~worker = Or_error.tag_arg result "worker" worker [%sexp_of: int] in
@@ -78,6 +80,22 @@ let create_producer
         if Result.is_error stopped then Ivar.fill_if_empty any_error ();
         tag stopped ~worker:i)
       |> Deferred.Or_error.combine_errors_unit)
+;;
+
+let update_worker_state
+  (type config args message state_update)
+  (T ((module Worker), workers) : (config, _, args, message, state_update) t)
+  ~worker
+  state_update
+  =
+  match Array.get_opt workers worker with
+  | None ->
+    Deferred.Or_error.error_s
+      [%message
+        "Worker index out of bounds"
+          (worker : int)
+          ~number_of_workers:(Array.length workers : int)]
+  | Some (_, _, worker) -> Worker.update_state worker state_update
 ;;
 
 let number_of_workers (T (_, workers)) = Array.length workers
