@@ -37,11 +37,11 @@ type ('a, 'a_producer, 'payload, 'payload_producer) iterator =
         iterator
 
 let gen_iter_with
-  (type a_producer payload_producer payload)
+  (type a_producer payload_producer payload state)
   ~(iterator : (int, a_producer, payload, payload_producer) iterator)
   (module Payload : Message.Payload with type t = payload)
-  ~init
-  ~(f : _ -> a_producer -> payload_producer)
+  ~(init : Args.t -> state)
+  ~(f : state -> a_producer -> payload_producer)
   =
   let reader ~worker =
     let reader =
@@ -57,24 +57,28 @@ let gen_iter_with
     | Global ->
       Parallel_iterator.make
         (Worker.make
+           ~init:(fun (_ : Args.t) -> return (Ok ()))
            ~create_producer:(fun ({ Args.worker; _ } as args) ->
              let producer = Iterator.of_pipe_reader (reader ~worker) in
              let state = init args in
              return (Ok (f state producer)))
-           ~create_consumer:(fun _ writer ->
+           ~create_consumer:(fun () (_ : Args.t) writer ->
              return
                (Ok (Iterator.of_direct_stream_writer ~flush_every:Int.max_value writer)))
+           ~state_updating:Not_using
            ~bin_args:Args.bin_t
            ~bin_message:(Message.bin_t Payload.bin_t))
     | Batched ->
       Parallel_iterator.make
         (Worker.make
+           ~init:(fun (_ : Args.t) -> return (Ok ()))
            ~create_producer:(fun ({ Args.worker; _ } as args) ->
              let producer = Iterator.Batched.of_pipe_reader (reader ~worker) in
              let state = init args in
              return (Ok (f state producer)))
-           ~create_consumer:(fun _ writer ->
+           ~create_consumer:(fun () (_ : Args.t) writer ->
              return (Ok (Iterator.Batched.of_direct_stream_writer writer)))
+           ~state_updating:Not_using
            ~bin_args:Args.bin_t
            ~bin_message:(Message.bin_t Payload.bin_t))
   in

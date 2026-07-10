@@ -7,10 +7,21 @@ open! Import
     pushback. It is designed for exactly one active iteration per connection. Attempting
     more than one iteration on the same connection will result in an error. *)
 
+(** [Connection_state.t] is the state of the connection in the worker. Each connection can
+    only be used for one iteration. *)
 module Connection_state : sig
   type t
 
   val create : unit -> t
+end
+
+(** [Worker_state.t] is the user-defined state of the worker process. This is
+    reinitialized per iteration with [init], and can be updated during an iteration with
+    [update_worker_state]. *)
+module Worker_state : sig
+  type 'a t
+
+  val create : unit -> 'a t
 end
 
 val start_rpc : ?name:string -> ?version:int -> unit -> unit Rpc.One_way.t
@@ -29,21 +40,36 @@ val stopped_rpc
   -> unit
   -> (unit, unit Or_error.t) Rpc.Rpc.t
 
-val implement_start : Connection_state.t -> unit -> unit
+val update_state_rpc
+  :  ?name:string
+  -> ?version:int
+  -> bin_state_update:'args Bin_prot.Type_class.t
+  -> unit
+  -> ('args, unit Or_error.t) Rpc.Rpc.t
+
+val implement_start : Connection_state.t -> unit
 
 val implement_iter
   :  create_producer:('args -> 'a Iterator.Producer.t Or_error.t Deferred.t)
   -> create_consumer:
-       ('args
+       ('state
+        -> 'args
         -> 'message Rpc.Pipe_rpc.Direct_stream_writer.t
         -> 'a Iterator.Consumer.t Or_error.t Deferred.t)
-  -> (Connection_state.t
-      -> 'args
-      -> 'message Rpc.Pipe_rpc.Direct_stream_writer.t
-      -> unit Or_error.t Deferred.t)
-       Staged.t
+  -> init:('args -> 'state Or_error.t Deferred.t)
+  -> worker_state:'state Worker_state.t
+  -> conn_state:Connection_state.t
+  -> 'args
+  -> 'message Rpc.Pipe_rpc.Direct_stream_writer.t
+  -> unit Or_error.t Deferred.t
 
-val implement_stopped : Connection_state.t -> unit -> unit Or_error.t Deferred.t
+val implement_stopped : Connection_state.t -> unit Or_error.t Deferred.t
+
+val implement_update_state
+  :  worker_state:'state Worker_state.t
+  -> update_worker_state:('state -> 'update -> unit Or_error.t Deferred.t)
+  -> 'update
+  -> unit Or_error.t Deferred.t
 
 module Global : sig
   (** The underlying [f] is called directly inside of a [Rpc.Pipe_rpc.dispatch_iter]

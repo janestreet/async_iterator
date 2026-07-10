@@ -15,6 +15,12 @@ module Connection_state = struct
   let read_stopped t = Ivar.read t.stopped
 end
 
+module Worker_state = struct
+  type 'a t = 'a or_null ref
+
+  let create () = ref Null
+end
+
 let start_rpc ?(name = "start") ?(version = 0) () =
   Rpc.One_way.create ~name ~version ~bin_msg:bin_unit
 ;;
@@ -39,43 +45,68 @@ let stopped_rpc ?(name = "stopped") ?(version = 0) () =
     ~include_in_error_count:Or_error
 ;;
 
-let implement_start connection_state () = Connection_state.fill_start_exn connection_state
-
-let implement_iter ~create_producer ~create_consumer =
-  Staged.stage (fun connection_state args writer ->
-    (* Creating either the producer or consumer might fail. If we created the producer
-       first, it'd be prudent to [Iterator.abort] it if the consumer has an error, in
-       order to clean up any resources. Instead, we can create the consumer first, since
-       it's unlikely to have things to clean up, and there's not an equivalent
-       [abort]-like operation for consumers anyway. (One reason for this is to support
-       producer-to-consumer mappings which are many-to-one - if a consumer is screwed up,
-       we definitely can't use its producer, but if a producer is screwed up, we might
-       still want to do things with its consumer.) *)
-    match%bind create_consumer args writer with
-    | Error _ as result ->
-      Rpc.Pipe_rpc.Direct_stream_writer.close writer;
-      return result
-    | Ok consumer ->
-      (match%bind create_producer args with
-       | Error _ as result ->
-         Rpc.Pipe_rpc.Direct_stream_writer.close writer;
-         return result
-       | Ok producer ->
-         let producer =
-           Iterator.add_start
-             producer
-             ~start:(Connection_state.read_start connection_state)
-         in
-         upon
-           (Monitor.try_with_join_or_error (fun () ->
-              Iterator.start_unsequenced producer consumer))
-           (fun stopped ->
-             Connection_state.fill_stopped_exn connection_state stopped;
-             Rpc.Pipe_rpc.Direct_stream_writer.close writer);
-         return (Ok ())))
+let update_state_rpc ?(name = "update_state") ?(version = 0) ~bin_state_update () =
+  Rpc.Rpc.create
+    ~name
+    ~version
+    ~bin_query:bin_state_update
+    ~bin_response:(Or_error.bin_t bin_unit)
+    ~include_in_error_count:Or_error
 ;;
 
-let implement_stopped connection_state () = Connection_state.read_stopped connection_state
+let implement_start connection_state = Connection_state.fill_start_exn connection_state
+
+let implement_iter
+  ~create_producer
+  ~create_consumer
+  ~init
+  ~worker_state
+  ~conn_state
+  args
+  writer
+  =
+  let%bind.Deferred.Or_error state = init args in
+  worker_state := This state;
+  (* Creating either the producer or consumer might fail. If we created the producer
+     first, it'd be prudent to [Iterator.abort] it if the consumer has an error, in order
+     to clean up any resources. Instead, we can create the consumer first, since it's
+     unlikely to have things to clean up, and there's not an equivalent [abort]-like
+     operation for consumers anyway. (One reason for this is to support
+     producer-to-consumer mappings which are many-to-one - if a consumer is screwed up, we
+     definitely can't use its producer, but if a producer is screwed up, we might still
+     want to do things with its consumer.) *)
+  let clean_up_on_error () =
+    worker_state := Null;
+    Rpc.Pipe_rpc.Direct_stream_writer.close writer
+  in
+  let%bind result =
+    let%bind.Deferred.Or_error consumer = create_consumer state args writer in
+    let%bind.Deferred.Or_error producer = create_producer args in
+    let producer =
+      Iterator.add_start producer ~start:(Connection_state.read_start conn_state)
+    in
+    upon
+      (Monitor.try_with_join_or_error (fun () ->
+         Iterator.start_unsequenced producer consumer))
+      (fun stopped ->
+        clean_up_on_error ();
+        Connection_state.fill_stopped_exn conn_state stopped);
+    return (Ok ())
+  in
+  Or_error.iter_error result ~f:(fun (_ : Error.t) -> clean_up_on_error ());
+  return result
+;;
+
+let implement_stopped connection_state = Connection_state.read_stopped connection_state
+
+let implement_update_state ~worker_state ~update_worker_state state_update =
+  match !worker_state with
+  | Null ->
+    Deferred.Or_error.error_string
+      "Cannot update worker state: state not initialized (worker has not started \
+       processing yet)"
+  | This state -> update_worker_state state state_update
+;;
 
 module Global = struct
   let gen_of_pipe_rpc

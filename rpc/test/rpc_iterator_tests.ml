@@ -44,23 +44,29 @@ let iter_rpc = Rpc_iterator.iter_rpc ~bin_args ~bin_message:Int.bin_t ()
 let stopped_rpc = Rpc_iterator.stopped_rpc ()
 
 let client ~create_producer ~create_consumer () =
+  let worker_state = Rpc_iterator.Worker_state.create () in
   Rpc_transport.client
     ~server_implementations:
       (Rpc.Implementations.create_exn
          ~implementations:
            [ Rpc.One_way.implement
                start_rpc
-               Rpc_iterator.implement_start
+               (fun conn_state () -> Rpc_iterator.implement_start conn_state)
                ~on_exception:Close_connection
-           ; Rpc.Pipe_rpc.implement_direct
-               iter_rpc
-               (Staged.unstage
-                  (Rpc_iterator.implement_iter ~create_producer ~create_consumer))
-               ~leave_open_on_exception:true
-           ; Rpc.Rpc.implement stopped_rpc Rpc_iterator.implement_stopped
+           ; Rpc.Pipe_rpc.implement_direct iter_rpc (fun conn_state args writer ->
+               Rpc_iterator.implement_iter
+                 ~create_producer
+                 ~create_consumer:(fun () -> create_consumer)
+                 ~init:(fun (_ : args) -> return (Ok ()))
+                 ~worker_state
+                 ~conn_state
+                 args
+                 writer)
+           ; Rpc.Rpc.implement stopped_rpc (fun conn_state () ->
+               Rpc_iterator.implement_stopped conn_state)
            ]
          ~on_unknown_rpc:`Raise
-         ~on_exception:Log_on_background_exn)
+         ~on_exception:(Raise_to_monitor (Monitor.current ())))
     ~server_connection_state:(fun (_ : Rpc.Connection.t) ->
       Rpc_iterator.Connection_state.create ())
 ;;

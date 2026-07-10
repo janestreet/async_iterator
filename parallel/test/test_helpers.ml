@@ -50,9 +50,23 @@ let consumer ?stop_after ?(pushback = fun (_ : Message.t) -> Maybe_pushback.unit
     ()
 ;;
 
-(* 3 because 1 is degenerate and some async things are weird with only 2, e.g. which order
-   ivar handlers run in, an optimization for [choose], etc. *)
+(** 3 because 1 is degenerate and some async things are weird with only 2, e.g. which
+    order ivar handlers run in, an optimization for [choose], etc. *)
 let number_of_workers = 3
+
+let with_worker_pool worker_module workers ~f =
+  let%bind pool = Worker_pool.create worker_module workers >>| ok_exn in
+  Monitor.protect (fun () -> f pool) ~finally:(fun () -> Worker_pool.close pool)
+;;
+
+let default_workers ?(stop = 5) () =
+  Nonempty_list.init number_of_workers ~f:(fun (_ : int) -> (), Info.create ~stop ())
+;;
+
+let create_producer_from_worker_pool pool =
+  Worker_pool.create_producer pool ~args:(fun ~worker _ info -> { Args.info; worker })
+  >>| ok_exn
+;;
 
 let iter_with
   ?(create_producer = create_producer)
@@ -60,30 +74,55 @@ let iter_with
   ?(info = fun (_ : int) -> Info.create ())
   consumer
   =
-  let worker =
+  let worker_module =
     Worker.make
+      ~init:(fun (_ : Args.t) -> return (Ok ()))
       ~create_producer
-      ~create_consumer:(fun _ writer ->
+      ~create_consumer:(fun () (_ : Args.t) writer ->
         return (Ok (Iterator.Batched.of_direct_stream_writer writer)))
+      ~state_updating:Not_using
       ~bin_args:Args.bin_t
       ~bin_message
   in
-  let workers =
-    List.init number_of_workers ~f:(fun worker -> (), info worker)
-    |> Nonempty_list.of_list_exn
+  let workers = Nonempty_list.init number_of_workers ~f:(fun worker -> (), info worker) in
+  with_worker_pool worker_module workers ~f:(fun pool ->
+    match%bind
+      Worker_pool.create_producer pool ~args:(fun ~worker () info ->
+        { Args.info; worker })
+    with
+    | Error error ->
+      print_s [%message "Failed to start" (error : Error.t)];
+      return ()
+    | Ok producer ->
+      let%bind reason = Iterator.start_unsequenced producer consumer in
+      print_s [%message "Stopped" (reason : unit Or_error.t)];
+      return ())
+;;
+
+module Worker_state = struct
+  type t = { mutable offset : int }
+end
+
+let make_state_worker
+  ?(init = fun (_ : Args.t) -> return (Ok { Worker_state.offset = 0 }))
+  ?(create_producer = create_producer)
+  ()
+  =
+  let update_worker_state (state : Worker_state.t) new_offset =
+    state.offset <- new_offset;
+    return (Ok ())
   in
-  match%bind
-    Iterator.create_producer_with_resource
-      (fun () -> Worker_pool.create worker workers)
-      ~close:(Worker_pool.close >> Deferred.ok)
-      ~create:
-        (Worker_pool.create_producer ~args:(fun ~worker () info -> { Args.info; worker }))
-  with
-  | Error error ->
-    print_s [%message "Failed to start" (error : Error.t)];
-    return ()
-  | Ok producer ->
-    let%bind reason = Iterator.start_unsequenced producer consumer in
-    print_s [%message "Stopped" (reason : unit Or_error.t)];
-    return ()
+  Worker.make
+    ~init
+    ~create_producer
+    ~create_consumer:(fun (state : Worker_state.t) (_ : Args.t) writer ->
+      return
+        (Ok
+           (Iterator.Batched.contra_map
+              (Iterator.Batched.of_direct_stream_writer writer)
+              ~f:(fun (message : Message.t) ->
+                { message with i = message.i + state.offset }))))
+    ~state_updating:(Using { update_worker_state; bin_state_update = bin_int })
+    ~bin_args:Args.bin_t
+    ~bin_message:Message.bin_t
 ;;
